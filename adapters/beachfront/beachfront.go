@@ -269,10 +269,6 @@ func getSchain(request *openrtb2.BidRequest) (openrtb_ext.ExtRequestPrebidSChain
 	return schain, json.Unmarshal(request.Source.Ext, &schain)
 }
 
-/*
-getBannerRequest, singular. A "Slot" is an "imp," and each Slot can have an AppId, so just one
-request to the beachfront banner endpoint gets all banner Imps.
-*/
 func getBannerRequest(request *openrtb2.BidRequest) (beachfrontBannerRequest, []error) {
 	var bfr beachfrontBannerRequest
 	var errs = make([]error, 0, len(request.Imp))
@@ -294,14 +290,17 @@ func getBannerRequest(request *openrtb2.BidRequest) (beachfrontBannerRequest, []
 			continue
 		}
 
+		err = setBidFloor(&beachfrontExt, &request.Imp[i])
+
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+
 		slot := beachfrontSlot{
 			Id:       appid,
 			Slot:     request.Imp[i].ID,
-			Bidfloor: beachfrontExt.BidFloor,
-		}
-
-		if beachfrontExt.BidFloor <= minBidFloor {
-			slot.Bidfloor = 0
+			Bidfloor: request.Imp[i].BidFloor,
 		}
 
 		for j := 0; j < len(request.Imp[i].Banner.Format); j++ {
@@ -451,8 +450,9 @@ func getVideoRequests(request *openrtb2.BidRequest) ([]beachfrontVideoRequest, [
 				var chunks = strings.Split(strings.Trim(bfReqs[i].Request.App.Bundle, "_"), ".")
 
 				if len(chunks) > 1 {
-					bfReqs[i].Request.App.Domain =
-						fmt.Sprintf("%s.%s", chunks[len(chunks)-(len(chunks)-1)], chunks[0])
+					appCopy := *bfReqs[i].Request.App
+					appCopy.Domain = fmt.Sprintf("%s.%s", chunks[len(chunks)-(len(chunks)-1)], chunks[0])
+					bfReqs[i].Request.App = &appCopy
 				}
 			}
 		}
@@ -468,11 +468,10 @@ func getVideoRequests(request *openrtb2.BidRequest) ([]beachfrontVideoRequest, [
 		imp.Banner = nil
 		imp.Ext = nil
 		imp.Secure = &secure
-
-		if beachfrontExt.BidFloor <= minBidFloor {
-			imp.BidFloor = 0
-		} else {
-			imp.BidFloor = beachfrontExt.BidFloor
+		if err := setBidFloor(&beachfrontExt, &imp); err != nil {
+			errs = append(errs, err)
+			failedRequestIndicies = append(failedRequestIndicies, i)
+			continue
 		}
 
 		if imp.Video.H == 0 && imp.Video.W == 0 {
@@ -543,10 +542,15 @@ func (a *BeachfrontAdapter) MakeBids(internalRequest *openrtb2.BidRequest, exter
 
 	for i := 0; i < len(bids); i++ {
 
-		// If we unmarshal without an error, this is an AdM video
-		if err := json.Unmarshal(bids[i].Ext, &dur); err == nil {
-			var impVideo openrtb_ext.ExtBidPrebidVideo
-			impVideo.Duration = int(dur.Duration)
+		if err := json.Unmarshal(bids[i].Ext, &dur); err == nil && dur.Duration > 0 {
+
+			impVideo := openrtb_ext.ExtBidPrebidVideo{
+				Duration: int(dur.Duration),
+			}
+
+			if len(bids[i].Cat) > 0 {
+				impVideo.PrimaryCategory = bids[i].Cat[0]
+			}
 
 			bidResponse.Bids = append(bidResponse.Bids, &adapters.TypedBid{
 				Bid:      &bids[i],
@@ -562,6 +566,31 @@ func (a *BeachfrontAdapter) MakeBids(internalRequest *openrtb2.BidRequest, exter
 	}
 
 	return bidResponse, errs
+}
+
+func setBidFloor(ext *openrtb_ext.ExtImpBeachfront, imp *openrtb2.Imp) error {
+	var floor float64
+
+	if imp.BidFloor > 0 {
+		floor = imp.BidFloor
+	} else if ext.BidFloor > 0 {
+		floor = ext.BidFloor
+	} else {
+		floor = minBidFloor
+	}
+
+	if floor >= 0 && imp.BidFloorCur != "" && strings.ToUpper(imp.BidFloorCur) != "USD" {
+		return &errortypes.BadInput{
+			Message: fmt.Sprintf("unsupported bid currency, %s. bids are currently accepted in USD only.", imp.BidFloorCur),
+		}
+	}
+
+	if floor <= minBidFloor {
+		floor = 0
+	}
+
+	imp.BidFloor = floor
+	return nil
 }
 
 func (a *BeachfrontAdapter) getBidType(externalRequest *adapters.RequestData) openrtb_ext.BidType {
