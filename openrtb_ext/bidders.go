@@ -116,6 +116,7 @@ const (
 	BidderBidsCube          BidderName = "bidscube"
 	BidderBmtm              BidderName = "bmtm"
 	BidderBrightroll        BidderName = "brightroll"
+	BidderCoinzilla         BidderName = "coinzilla"
 	BidderColossus          BidderName = "colossus"
 	BidderConnectAd         BidderName = "connectad"
 	BidderConsumable        BidderName = "consumable"
@@ -134,6 +135,7 @@ const (
 	BidderGamma             BidderName = "gamma"
 	BidderGamoshi           BidderName = "gamoshi"
 	BidderGrid              BidderName = "grid"
+	BidderGroupm            BidderName = "groupm"
 	BidderGumGum            BidderName = "gumgum"
 	BidderHuaweiAds         BidderName = "huaweiads"
 	BidderImpactify         BidderName = "impactify"
@@ -256,6 +258,7 @@ func CoreBidderNames() []BidderName {
 		BidderBidsCube,
 		BidderBmtm,
 		BidderBrightroll,
+		BidderCoinzilla,
 		BidderColossus,
 		BidderConnectAd,
 		BidderConsumable,
@@ -274,6 +277,7 @@ func CoreBidderNames() []BidderName {
 		BidderGamma,
 		BidderGamoshi,
 		BidderGrid,
+		BidderGroupm,
 		BidderGumGum,
 		BidderHuaweiAds,
 		BidderImpactify,
